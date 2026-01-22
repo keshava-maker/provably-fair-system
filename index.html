@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Provably Fair Engine</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #000000;
+      color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 20px;
+      min-height: 100vh;
+    }
+
+    .box {
+      background: #111111;
+      padding: 20px;
+      border-radius: 10px;
+      width: 400px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.6);
+      margin: 10px;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 8px;
+      border-radius: 5px;
+      border: none;
+    }
+
+    button {
+      background: #22c55e;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #16a34a;
+    }
+
+    .result {
+      margin-top: 10px;
+      font-size: 14px;
+      word-wrap: break-word;
+    }
+
+    .high {
+      color: #22c55e;
+      font-weight: bold;
+    }
+
+    .low {
+      color: #ef4444;
+      font-weight: bold;
+    }
+
+    .normal {
+      color: #e5e7eb;
+    }
+    
+    .lowe {
+      color: #000000;
+
+    .history-entry {
+      border-bottom: 1px solid #333;
+      padding: 5px 0;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ENGINE BOX -->
+<div class="box">
+  <h2>Provably Fair Engine</h2>
+  <a href="verify.html" target="_blank">
+    <button style="margin-bottom:10px; background:#3b82f6; color:white;">
+      Go to Verification Page
+    </button>
+  </a>
+
+
+  <input id="serverSeed" placeholder="Server Seed">
+  <input id="client1" placeholder="Client Seed 1">
+  <input id="client2" placeholder="Client Seed 2">
+  <input id="client3" placeholder="Client Seed 3">
+
+  <button onclick="generate()">Generate Result</button>
+
+  <div class="result">
+    <p><b>Combined String:</b><br><span id="combined"></span></p>
+    <p>
+      <b>Hash:</b><br>
+      <span id="hash"></span><br>
+      <button onclick="copyHash()" style="margin-top:5px;">Copy Hash</button>
+    </p>
+
+    <p><b>Multiplier:</b> <span id="multiplier"></span></p>
+  </div>
+</div>
+
+<!-- HISTORY BOX -->
+<div class="box">
+  <h3>Round History</h3>
+  <div id="history"></div>
+
+  <button onclick="clearHistory()" style="margin-top: 10px; background:#ef4444; color:white;">
+    Clear History
+  </button>
+</div>
+
+<script>
+function copyHash() {
+  const hashText = document.getElementById("hash").innerText;
+
+  if (!hashText) {
+    alert("No hash to copy yet.");
+    return;
+  }
+
+  navigator.clipboard.writeText(hashText);
+  alert("Hash copied to clipboard!");
+}
+async function generate() {
+  const server = document.getElementById("serverSeed").value;
+  const c1 = document.getElementById("client1").value;
+  const c2 = document.getElementById("client2").value;
+  const c3 = document.getElementById("client3").value;
+
+  if (!server || !c1 || !c2 || !c3) {
+    alert("Please fill all seed fields.");
+    return;
+  }
+
+  const combined = server + c1 + c2 + c3;
+
+  // Convert text to bytes
+  const encoder = new TextEncoder();
+  const data = encoder.encode(combined);
+
+  // SHA-512 Hash in browser
+  const hashBuffer = await crypto.subtle.digest("SHA-512", data);
+
+  // Convert buffer to HEX
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // Take first 13 hex characters
+  const hexSlice = hashHex.slice(0, 13);
+
+  // HEX → Decimal
+  const decimal = parseInt(hexSlice, 16);
+
+  // Multiplier Formula
+  const multiplier = Math.round(((2 ** 52) / (decimal + 1)) * 100) / 100;
+
+  // Display
+  document.getElementById("combined").innerText = combined;
+  document.getElementById("hash").innerText = hashHex;
+  document.getElementById("multiplier").innerText = multiplier + "x";
+
+  // Save to history
+  saveToHistory({
+    combined: combined,
+    multiplier: multiplier + "x",
+    time: new Date().toLocaleTimeString()
+  });
+}
+
+// Save round to local storage
+function saveToHistory(round) {
+  let history = JSON.parse(localStorage.getItem("roundHistory")) || [];
+  history.unshift(round); // newest first
+  localStorage.setItem("roundHistory", JSON.stringify(history));
+  displayHistory();
+}
+
+// Display history
+function displayHistory() {
+  const historyDiv = document.getElementById("history");
+  const history = JSON.parse(localStorage.getItem("roundHistory")) || [];
+
+  historyDiv.innerHTML = "";
+
+  history.slice(0, 10).forEach((round, index) => {
+    const entry = document.createElement("div");
+    entry.className = "history-entry";
+
+    const value = parseFloat(round.multiplier);
+
+    let className = "normal";
+    if (value > 2) className = "high";
+    if (value < 1.5) className = "low";
+    if (value < 1.2) className = "lowe";
+
+    entry.innerHTML = `
+      <b>Round ${index + 1}</b><br>
+      Time: ${round.time}<br>
+      Multiplier: <span class="${className}">${round.multiplier}</span><br>
+      Seeds: ${round.combined.slice(0, 25)}...
+    `;
+
+
+    historyDiv.appendChild(entry);
+  });
+}
+
+// Clear history
+function clearHistory() {
+  if (confirm("Clear all round history?")) {
+    localStorage.removeItem("roundHistory");
+    displayHistory();
+  }
+}
+
+// Load history on page start
+displayHistory();
+</script>
+
+</body>
+</html>
